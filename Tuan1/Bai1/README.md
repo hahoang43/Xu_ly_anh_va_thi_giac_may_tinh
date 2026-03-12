@@ -1,9 +1,15 @@
 ## Kết quả
+# Ảnh màu
 
 ![Ảnh màu](photo.jpg)
+# Ảnh từng kênh
+
 ![Kênh Blue](blue.png)
+
 ![Kênh Green](green.png)
+
 ![Kênh Red](red.png)
+# Ảnh grayscale
 ![Ảnh xám (Luminosity)](gray_manual.png)
 
 
