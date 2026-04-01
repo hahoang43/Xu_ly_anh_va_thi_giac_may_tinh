@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 
 def adaptive_brightness_adjuster(image_path):
     # 1. INPUT: Đọc ảnh ở dạng Grayscale
-    img = cv2.imread('chaysang.jpg', cv2.IMREAD_GRAYSCALE)
+    img = cv2.imread(image_path, cv2.IMREAD_GRAYSCALE)
     if img is None:
         print("Không thể đọc được ảnh. Vui lòng kiểm tra đường dẫn.")
         return
@@ -51,10 +51,9 @@ def adaptive_brightness_adjuster(image_path):
         gamma = 2.0
         corrected_img = np.array(255 * (img / 255.0) ** gamma, dtype='uint8')
         
-    else: # Normal
+    else: 
         corrected_img = img.copy()
 
-    # 4. OUTPUT: Corrected image + visualization
     plt.figure(figsize=(12, 8))
     plt.suptitle(f"Adaptive Brightness Adjuster\nDetected Status: {status}", fontsize=16, fontweight='bold')
 
@@ -87,4 +86,4 @@ def adaptive_brightness_adjuster(image_path):
     plt.tight_layout()
     plt.show()
 
-adaptive_brightness_adjuster('chaysang.jpg')
+adaptive_brightness_adjuster('low_contrast.jpg') 
