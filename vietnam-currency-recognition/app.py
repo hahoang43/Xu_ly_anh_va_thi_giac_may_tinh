@@ -219,26 +219,26 @@ def main() -> None:
         """
         <style>
             .block-container {
-                max-width: 1380px;
-                padding-top: 1.6rem;
-                padding-bottom: 1.2rem;
+                max-width: 1680px;
+                padding-top: 1.8rem;
+                padding-bottom: 1.6rem;
             }
             .main-title {
                 text-align: center;
-                font-size: 40px;
+                font-size: 46px;
                 font-weight: 700;
                 letter-spacing: 0.4px;
-                margin-bottom: 0.5rem;
-                margin-top: 0.3rem;
-                line-height: 1.25;
+                margin-bottom: 0.35rem;
+                margin-top: 0.45rem;
+                line-height: 1.35;
                 color: #0f172a;
                 overflow: visible;
             }
             .sub-title {
                 text-align: center;
-                font-size: 17px;
+                font-size: 21px;
                 color: #475569;
-                margin-bottom: 0.8rem;
+                margin-bottom: 1.15rem;
             }
             .section-card {
                 background: #ffffff;
@@ -259,19 +259,57 @@ def main() -> None:
                 margin-bottom: 12px;
             }
             div.stButton > button {
-                height: 54px;
+                height: 58px;
                 border-radius: 10px;
                 font-weight: 700;
                 letter-spacing: 0.2px;
-                font-size: 18px;
+                font-size: 21px;
             }
             [data-testid="stFileUploaderDropzone"] {
-                padding-top: 20px;
-                padding-bottom: 20px;
-                border-radius: 12px;
+                padding-top: 30px;
+                padding-bottom: 30px;
+                border-radius: 14px;
+                min-height: 110px;
+            }
+            [data-testid="stFileUploaderDropzone"] small {
+                font-size: 16px !important;
+            }
+            [data-testid="stFileUploaderDropzone"] button {
+                height: 44px !important;
+                font-size: 18px !important;
             }
             [data-testid="stMetricValue"] {
-                font-size: 34px;
+                font-size: 42px;
+            }
+            .result-card {
+                border: 1px solid #dbe3ef;
+                border-radius: 14px;
+                padding: 22px 24px;
+                background: #ffffff;
+                box-shadow: 0 6px 16px rgba(15, 23, 42, 0.06);
+                min-height: 210px;
+                display: flex;
+                flex-direction: column;
+                justify-content: center;
+            }
+            .result-title {
+                margin: 0 0 10px;
+                font-size: 20px;
+                color: #64748b;
+                font-weight: 600;
+                min-height: 24px;
+            }
+            .result-value {
+                margin: 0;
+                font-size: 50px;
+                color: #0f172a;
+                font-weight: 700;
+                line-height: 1.15;
+                white-space: nowrap;
+            }
+            .result-panel {
+                min-height: 0;
+                display: block;
             }
         </style>
         """,
@@ -298,27 +336,43 @@ def main() -> None:
         st.error(str(e))
         return
 
-    left, right = st.columns([1.05, 1], gap="medium")
+    left, right = st.columns([1, 1], gap="medium")
     with left:
         st.image(
             cv2.cvtColor(image_bgr, cv2.COLOR_BGR2RGB),
-            caption="Ảnh đầu vào",
-            width=540,
+            use_container_width=True,
         )
 
     with right:
+        st.markdown('<div class="result-panel">', unsafe_allow_html=True)
         if st.button("Nhận diện mệnh giá", type="primary", use_container_width=True):
             with st.spinner("Đang xử lý..."):
                 st.session_state["predict_out"] = run_pipeline_dummy(image_bgr)
 
         out = st.session_state.get("predict_out")
         if out is not None:
-            st.markdown("### Output")
-            c1, c2 = st.columns(2)
+            c1, c2 = st.columns(2, gap="small")
             with c1:
-                st.metric("Mệnh giá dự đoán", out["label"])
+                st.markdown(
+                    f"""
+                    <div class="result-card">
+                        <p class="result-title">Mệnh giá dự đoán</p>
+                        <p class="result-value">{out["label"]}</p>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
             with c2:
-                st.metric("Mức độ tin cậy", f"{out['confidence']:.2%}")
+                st.markdown(
+                    f"""
+                    <div class="result-card">
+                        <p class="result-title">Mức độ tin cậy</p>
+                        <p class="result-value">{out['confidence']:.2%}</p>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+        st.markdown("</div>", unsafe_allow_html=True)
 
 
 if __name__ == "__main__":
