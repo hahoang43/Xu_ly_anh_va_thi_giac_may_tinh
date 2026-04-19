@@ -1,57 +1,57 @@
-from __future__ import annotations
-
-import os
-from pathlib import Path
-from typing import Sequence
-
 import cv2
 import numpy as np
-from sklearn.cluster import MiniBatchKMeans
+import os
 
-DEFAULT_VECTOR_LENGTH = 100
-DEFAULT_MAX_KEYPOINTS = 500
-DEFAULT_RANDOM_STATE = 42
-DEFAULT_MAX_DESCRIPTORS_TOTAL = 50000
-
-
-def _to_gray(image_input: str | np.ndarray) -> np.ndarray:
-    if isinstance(image_input, (str, os.PathLike)):
-        image = cv2.imread(str(image_input), cv2.IMREAD_GRAYSCALE)
-        if image is None:
-            raise ValueError(f"Khong the doc anh: {image_input}")
+def _to_gray(image_input):
+    if isinstance(image_input, str):
+        image = cv2.imread(image_input, cv2.IMREAD_GRAYSCALE)
         return image
     if isinstance(image_input, np.ndarray):
-        image = image_input.copy()
-        if image.ndim == 2:
-            gray = image
-        elif image.ndim == 3:
-            gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-        else:
-            raise ValueError("Anh dau vao khong hop le")
-        if gray.dtype != np.uint8:
-            gray = np.clip(gray, 0, 255).astype(np.uint8)
-        return gray
-    raise TypeError("image_input phai la duong dan anh hoac numpy.ndarray")
+        return cv2.cvtColor(image_input, cv2.COLOR_BGR2GRAY) if image_input.ndim == 3 else image_input
+    return None
 
 
-def extract_sift_descriptors(
-    image_input: str | np.ndarray,
-    max_keypoints: int = DEFAULT_MAX_KEYPOINTS,
-    contrast_threshold: float = 0.01,
-    edge_threshold: float = 10,
-    sigma: float = 1.2,
-) -> np.ndarray:
-    gray = _to_gray(image_input)
-    sift = cv2.SIFT_create(
-        nfeatures=max_keypoints,
-        contrastThreshold=contrast_threshold,
-        edgeThreshold=edge_threshold,
-        sigma=sigma,
-    )
-    _, descriptors = sift.detectAndCompute(gray, None)
-    if descriptors is None or descriptors.size == 0:
-        return np.zeros((0, 128), dtype=np.float32)
-    return descriptors.astype(np.float32)
+def extract_sift_features(image_input):
+    gray_img = _to_gray(image_input)
+    if gray_img is None: return None, None
+    sift = cv2.SIFT_create()
+    return sift.detectAndCompute(gray_img, None)
+
+def count_good_matches(kp_test, des_test, kp_template, des_template, ratio_thresh=0.75):
+    """
+    Hàm đối sánh nâng cao: Lowe's Ratio Test + RANSAC lọc nhiễu hình học.
+    """
+    if des_test is None or des_template is None or len(des_test) < 4 or len(des_template) < 4:
+        return 0
+        
+    # 1. So khớp bằng FLANN
+    FLANN_INDEX_KDTREE = 1
+    index_params = dict(algorithm=FLANN_INDEX_KDTREE, trees=5)
+    search_params = dict(checks=50)
+    flann = cv2.FlannBasedMatcher(index_params, search_params)
+    
+    matches = flann.knnMatch(des_test, des_template, k=2)
+    
+    # 2. Bước lọc 1: Lowe's Ratio Test
+    good_matches_list = []
+    for m, n in matches:
+        if m.distance < ratio_thresh * n.distance:
+            good_matches_list.append(m)
+            
+    # 3. Bước lọc 2: RANSAC 
+    # Cần ít nhất 4 điểm để tìm ma trận Homography
+    if len(good_matches_list) >= 4:
+        src_pts = np.float32([kp_test[m.queryIdx].pt for m in good_matches_list]).reshape(-1, 1, 2)
+        dst_pts = np.float32([kp_template[m.trainIdx].pt for m in good_matches_list]).reshape(-1, 1, 2)
+        
+        # Tìm ma trận Homography và mặt nạ các điểm inliers (điểm đúng quy luật)
+        M, mask = cv2.findHomography(src_pts, dst_pts, cv2.RANSAC, 10.0)
+        
+        if mask is not None:
+            # Trả về số lượng điểm inliers thực sự
+            return int(np.sum(mask))
+            
+    return len(good_matches_list)
 
 
 def build_bow_vocabulary(

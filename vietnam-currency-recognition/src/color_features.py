@@ -5,16 +5,9 @@ import os
 def get_hsv_histogram(image_input, bins=10):
     """
     Hàm nhận vào ảnh tiền đã cắt, chia làm 3 phần và tính HSV Histogram.
-    
-    Args:
-        image_input: Có thể là đường dẫn ảnh (string) hoặc mảng pixel numpy (Mock Data).
-        bins (int): Số lượng bin cho mỗi kênh màu (mặc định 10 để tổng vector = 90).
-        
-    Returns:
-        numpy.ndarray: Vector đặc trưng 1 chiều kiểu số thực, độ dài 90.
+    [ĐÃ NÂNG CẤP]: Tích hợp Bộ lọc chống lóa (Glare Filter) với ngưỡng 245 để không xóa nhầm tờ 2.000đ và 500.000đ.
     """
-    
-    # 1. Xử lý Input (Hỗ trợ cả đường dẫn file hoặc mảng numpy)
+    # 1. Xử lý Input
     if isinstance(image_input, str):
         img = cv2.imread(image_input)
         if img is None:
@@ -28,35 +21,46 @@ def get_hsv_histogram(image_input, bins=10):
     hsv_img = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
     height, width, _ = hsv_img.shape
 
-    # 3. Chia ảnh làm 3 vùng: Trái, Giữa, Phải theo chiều rộng
+    # 3. TẠO BỘ LỌC CHỐNG LÓA
+    # Chỉ bắt những điểm cực kỳ trắng/sáng (Value > 245, Saturation < 15)
+    lower_glare = np.array([0, 0, 245])    
+    upper_glare = np.array([180, 15, 255]) 
+    
+    # Tạo bộ lọc vùng bị lóa (pixel lóa = 255, bình thường = 0)
+    glare_filter = cv2.inRange(hsv_img, lower_glare, upper_glare)
+    
+    # Đảo ngược bộ lọc để GIỮ LẠI vùng bình thường (bỏ vùng lóa)
+    mask_giu_lai = cv2.bitwise_not(glare_filter)
+
+    # 4. Chia ảnh làm 3 vùng: Trái, Giữa, Phải
     w_third = width // 3
-    
-    left_region = hsv_img[:, :w_third]
-    middle_region = hsv_img[:, w_third:2*w_third]
-    right_region = hsv_img[:, 2*w_third:]
-    
-    regions = [left_region, middle_region, right_region]
     feature_vector = []
 
-    # 4. Tính Histogram cho từng vùng
-    for region in regions:
-        # Tính histogram cho từng kênh H, S, V riêng biệt
-        hist_h = cv2.calcHist([region], [0], None, [bins], [0, 180])
-        hist_s = cv2.calcHist([region], [1], None, [bins], [0, 256])
-        hist_v = cv2.calcHist([region], [2], None, [bins], [0, 256])
+    for i in range(3):
+        start_x = i * w_third
+        # Đảm bảo phần Phải lấy sát đến tận mép ảnh
+        end_x = width if i == 2 else (i + 1) * w_third
+        
+        # Cắt vùng tương ứng trên cả ảnh HSV và Mặt nạ
+        roi_hsv = hsv_img[:, start_x:end_x]
+        roi_mask = mask_giu_lai[:, start_x:end_x]
+
+        # 5. Tính Histogram có ÁP DỤNG BỘ LỌC CHỐNG LÓA
+        # Máy sẽ bỏ qua không đếm màu ở những pixel bị lóa
+        hist_h = cv2.calcHist([roi_hsv], [0], roi_mask, [bins], [0, 180])
+        hist_s = cv2.calcHist([roi_hsv], [1], roi_mask, [bins], [0, 256])
+        hist_v = cv2.calcHist([roi_hsv], [2], roi_mask, [bins], [0, 256])
 
         # Chuẩn hóa (Normalize) histogram
         cv2.normalize(hist_h, hist_h, alpha=0, beta=1, norm_type=cv2.NORM_MINMAX)
         cv2.normalize(hist_s, hist_s, alpha=0, beta=1, norm_type=cv2.NORM_MINMAX)
         cv2.normalize(hist_v, hist_v, alpha=0, beta=1, norm_type=cv2.NORM_MINMAX)
 
-        # Nối (flatten) các kênh H, S, V của vùng hiện tại
-        region_features = np.concatenate([hist_h.flatten(), hist_s.flatten(), hist_v.flatten()])
-        
-        # Thêm vào mảng vector tổng
-        feature_vector.extend(region_features)
+        # Nối vector
+        feature_vector.extend(hist_h.flatten())
+        feature_vector.extend(hist_s.flatten())
+        feature_vector.extend(hist_v.flatten())
 
-    # 5. Trả về mảng số thực (float32)
     return np.array(feature_vector, dtype=np.float32)
 
 # ==========================================
