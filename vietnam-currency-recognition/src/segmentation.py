@@ -2,7 +2,6 @@ import cv2
 import numpy as np
 import os
 
-# Import trực tiếp hàm từ file preprocessing.py của bạn
 from preprocessing import tien_xu_ly_anh 
 
 def sap_xep_toa_do(pts):
@@ -100,7 +99,7 @@ def phan_doan_va_nan_chinh(anh_goc, width=800, height=400):
 # =====================================================================
 # Main Pipeline
 # =====================================================================
-# if __name__ == "__main__":
+if __name__ == "__main__":
     thu_muc_test = "../data/raw" 
     thu_muc_luu = "../data/segmented" 
     

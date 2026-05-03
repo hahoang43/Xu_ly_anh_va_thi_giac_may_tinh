@@ -15,17 +15,24 @@ def tien_xu_ly_anh(input_data):
     if img is None:
         raise ValueError("[Lỗi Preprocessing] Không thể đọc được dữ liệu ảnh. Hãy kiểm tra lại file.")
 
+
+    # Nếu ảnh màu, cân bằng sáng trên kênh L (LAB), giữ lại màu
     if len(img.shape) == 3:
-        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+        lab = cv2.cvtColor(img, cv2.COLOR_BGR2LAB)
+        l, a, b = cv2.split(lab)
+        clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+        l2 = clahe.apply(l)
+        lab = cv2.merge((l2, a, b))
+        img_clahe = cv2.cvtColor(lab, cv2.COLOR_LAB2BGR)
+        # Làm mờ nhẹ nếu cần
+        img_out = cv2.GaussianBlur(img_clahe, (3, 3), 0)
+        return img_out
     else:
-        gray = img 
-
-    blurred = cv2.GaussianBlur(gray, (5, 5), 0)
-
-    clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
-    anh_ro_net = clahe.apply(blurred)
-
-    return anh_ro_net
+        # Ảnh xám: cân bằng sáng nhẹ, làm mờ nhẹ
+        clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+        img_clahe = clahe.apply(img)
+        img_out = cv2.GaussianBlur(img_clahe, (3, 3), 0)
+        return img_out
 
 # Test 
 #  if __name__ == "__main__":
