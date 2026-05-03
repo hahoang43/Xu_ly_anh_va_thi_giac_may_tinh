@@ -7,7 +7,7 @@ __pycache__/
 /data/raw/
 
 # Ignore images produced/used by segmentation
-/segmented/
+/data/segmented/
 
 # Optional: ignore editor/temp files
 *.swp
