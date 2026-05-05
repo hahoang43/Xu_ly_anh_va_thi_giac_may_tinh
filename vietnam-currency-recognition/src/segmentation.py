@@ -96,10 +96,10 @@ def phan_doan_va_nan_chinh(anh_goc, width=800, height=400):
     
     return anh_nan_phang
 
-# =====================================================================
-# Main Pipeline
-# =====================================================================
-if __name__ == "__main__":
+
+# Test
+
+# if __name__ == "__main__":
     thu_muc_test = "../data/raw" 
     thu_muc_luu = "../data/segmented" 
     

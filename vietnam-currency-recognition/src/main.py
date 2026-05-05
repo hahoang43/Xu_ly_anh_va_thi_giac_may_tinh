@@ -1,16 +1,13 @@
 import cv2
 import numpy as np
 import os
-
-# Import các module chuyên gia của nhóm
 from segmentation import phan_doan_va_nan_chinh
 from preprocessing import tien_xu_ly_anh
 from color_features import get_hsv_histogram
 from shape_features import extract_sift_features, count_good_matches
 
-# ==============================================================
-# 1. HÀM TỰ ĐỘNG NẠP MẪU (Nạp mẫu có chọn lọc)
-# ==============================================================
+
+# 1. HÀM NẠP MẪU
 def nap_mau_tu_dong(thu_muc_raw='data/raw'):
     templates = [] 
     for menh_gia in sorted(os.listdir(thu_muc_raw)):
@@ -18,30 +15,32 @@ def nap_mau_tu_dong(thu_muc_raw='data/raw'):
         if not os.path.isdir(thu_muc_con):
             continue
 
-        # Ưu tiên lấy các file _phang_ trước
-        danh_sach_phang = sorted([f for f in os.listdir(thu_muc_con) if f.lower().endswith(('.jpg', '.jpeg', '.png')) and '_phang_' in f.lower()])
-        # Sau đó lấy thêm các file còn lại
-        danh_sach_khac = sorted([f for f in os.listdir(thu_muc_con) if f.lower().endswith(('.jpg', '.jpeg', '.png')) and f not in danh_sach_phang])
+        danh_sach_all = [f for f in os.listdir(thu_muc_con) if f.lower().endswith(('.jpg', '.jpeg', '.png'))]
         
-        # [CHIẾN THUẬT MỚI]: Nâng ngưỡng cho 3 mệnh giá yếu
-        if menh_gia in ['10000', '50000', '200000']:
+        danh_sach_phang = sorted([f for f in danh_sach_all if '_phang_' in f.lower()])
+        danh_sach_A = sorted([f for f in danh_sach_all if f.startswith('A_') or f.startswith('a_')])
+        danh_sach_khac = sorted([f for f in danh_sach_all if f not in danh_sach_phang and f not in danh_sach_A])
+        
+        if menh_gia in ['1000', '20000', '200000']:
             gioi_han = 6
         else:
             gioi_han = 4
             
-        # Gộp lại, ưu tiên _phang_ lên đầu, lấy theo giới hạn đã thiết lập
-        danh_sach_anh = (danh_sach_phang + danh_sach_khac)[:gioi_han]
+        danh_sach_uu_tien = danh_sach_phang + danh_sach_A + danh_sach_khac
 
-        for ten_file in danh_sach_anh:
+        so_luong_da_nap = 0
+        for ten_file in danh_sach_uu_tien:
+            if so_luong_da_nap >= gioi_han:
+                break 
+
             duong_dan = os.path.join(thu_muc_con, ten_file)
             img_mau = cv2.imread(duong_dan)
             if img_mau is None:
                 continue
 
-            # Xử lý ảnh mẫu để đưa vào bộ nhớ RAM
             img_mau_cat = phan_doan_va_nan_chinh(img_mau)
             if img_mau_cat is None:
-                img_mau_cat = cv2.resize(img_mau, (800, 400)) # Fallback nếu không cắt được
+                img_mau_cat = cv2.resize(img_mau, (800, 400)) 
 
             img_mau_sach = tien_xu_ly_anh(img_mau_cat)
             if img_mau_sach.ndim == 2:
@@ -58,21 +57,19 @@ def nap_mau_tu_dong(thu_muc_raw='data/raw'):
                     'sift_des': des,
                     'color_hist': hist_mau
                 })
+                so_luong_da_nap += 1 
                 
-    print(f"✅ Đã nạp thành công {len(templates)} mẫu chuẩn vào hệ thống!")
+    print(f"Đã nạp thành công {len(templates)} mẫu chuẩn vào hệ thống!")
     print("Danh sách ảnh mẫu đã nạp:")
     for idx, mau in enumerate(templates, 1):
         print(f" {idx:02d}. {mau['menh_gia']}/{mau['ten_file']}")
     return templates
-# ==============================================================
-# 2. BỘ NÃO NHẬN DIỆN (CÔNG THỨC HYBRID SCORING MỚI)
-# ==============================================================
+
+# 2. NHẬN DIỆN
 def nhan_dien_tien(duong_dan_anh_test, templates):
     img_test = cv2.imread(duong_dan_anh_test)
     if img_test is None: return "Lỗi", {}
 
-    # Bước 1: Tiền xử lý trực tiếp trên RAM
-    # [CHỐT AN TOÀN 2]: Fallback nếu cắt ảnh test bị fail
     img_cat = phan_doan_va_nan_chinh(img_test)
     if img_cat is None:
         img_cat = cv2.resize(img_test, (800, 400))
@@ -81,72 +78,59 @@ def nhan_dien_tien(duong_dan_anh_test, templates):
     if img_sach.ndim == 2:
         img_sach = cv2.cvtColor(img_sach, cv2.COLOR_GRAY2BGR)
 
-    # Bước 2: Trích đặc trưng của ảnh đang test
     kp_test, des_test = extract_sift_features(img_sach)
     hist_test = get_hsv_histogram(img_cat)
 
     if des_test is None or len(des_test) < 5: return "Ảnh quá mờ", {}
 
     bang_diem = []
-
-    # Bước 3: Đối sánh với từng mẫu trong từ điển
     for mau in templates:
-        # --- Chấm điểm SIFT (Hình thái) ---
+        np.random.seed(0)
+        cv2.setRNGSeed(0)
         try:
             good_matches = count_good_matches(kp_test, des_test, mau['kp'], mau['sift_des'])
         except TypeError:
             good_matches = count_good_matches(des_test, mau['sift_des'])
         
-        # Công thức chuẩn hóa %
         tong_diem_mau = len(mau['sift_des'])
         ti_le_sift = (good_matches / tong_diem_mau) * 100 if tong_diem_mau > 0 else 0
-        
-        # ĐIỂM LAI (HYBRID): Kết hợp Tỷ lệ % và Số lượng tuyệt đối
         diem_hinh_thai = (ti_le_sift + min(good_matches, 100)) / 2
-                
-        # --- Chấm điểm Màu sắc (HSV) ---
+        
         color_sim = cv2.compareHist(hist_test, mau['color_hist'], cv2.HISTCMP_CORREL)
         color_score = max(0, color_sim * 100) 
         
-        # --- TỔNG ĐIỂM TRỌNG SỐ ---
-        # Chuẩn hóa: 75% Hình thái SIFT + 25% Màu sắc HSV (Khớp với báo cáo Chương 3)
         total_score = (diem_hinh_thai * 0.75) + (color_score * 0.25)
-        
         bang_diem.append({
             'menh_gia': mau['menh_gia'],
             'total_score': total_score
         })
         
-    # Chọn mệnh giá có điểm cao nhất
     mau_thang_cuoc = max(bang_diem, key=lambda x: x['total_score'])
     
-    # Ngưỡng từ chối (Nếu điểm quá thấp thì không kết luận)
     if mau_thang_cuoc['total_score'] < 12.0:
         return "Không xác định", {}
         
     return mau_thang_cuoc['menh_gia'], {}
 
-# ==============================================================
-# 3. HÀM QUÉT TOÀN BỘ DATASET ĐỂ TÍNH ACCURACY
-# ==============================================================
-# def danh_gia_toan_bo_dataset(thu_muc_raw, templates):
-    print(f"\n🚀 KIỂM THỬ TỔNG THỂ TRÊN DATASET: {thu_muc_raw}")
+# 3. Test toàn bộ dataset
+def danh_gia_toan_bo_dataset(thu_muc_raw, templates):
+    print(f"\n KIỂM THỬ TỔNG THỂ TRÊN DATASET: {thu_muc_raw}")
     print("-" * 65)
     
     tong_so_anh = 0
     so_cau_dung = 0
     thong_ke = {}
+    # cac_menh_gia = ['1000']
+    cac_menh_gia = sorted([d for d in os.listdir(thu_muc_raw) if os.path.isdir(os.path.join(thu_muc_raw, d))])
+    so_lan_du_doan_la = {mg: 0 for mg in cac_menh_gia}
+    so_lan_du_doan_la.update({"Không xác định": 0, "Ảnh quá mờ": 0, "Lỗi": 0})
 
-    for menh_gia_that in sorted(os.listdir(thu_muc_raw)):
+    for menh_gia_that in cac_menh_gia:
         thu_muc_con = os.path.join(thu_muc_raw, menh_gia_that)
-        if not os.path.isdir(thu_muc_con):
-            continue
-
         thong_ke[menh_gia_that] = {'dung': 0, 'tong': 0}
 
-        # Quét toàn bộ ảnh hợp lệ trong thư mục mệnh giá
         danh_sach_file = sorted([f for f in os.listdir(thu_muc_con) if f.lower().endswith(('.jpg', '.png', '.jpeg'))])
-
+        
         for ten_file in danh_sach_file:
             duong_dan_anh = os.path.join(thu_muc_con, ten_file)
             tong_so_anh += 1
@@ -154,35 +138,46 @@ def nhan_dien_tien(duong_dan_anh_test, templates):
 
             ket_qua_doan, _ = nhan_dien_tien(duong_dan_anh, templates)
 
+            if ket_qua_doan in so_lan_du_doan_la:
+                so_lan_du_doan_la[ket_qua_doan] += 1
+            else:
+                so_lan_du_doan_la[ket_qua_doan] = 1
+
             if ket_qua_doan == menh_gia_that:
                 so_cau_dung += 1
                 thong_ke[menh_gia_that]['dung'] += 1
-                status = "✅ Đúng"
+                status = "Đúng"
             else:
-                status = f"❌ SAI ({ket_qua_doan})"
-
+                status = f"SAI ({ket_qua_doan})"
             print(f"[{tong_so_anh:03d}] {ten_file:<25} -> {status}")
 
-    # IN BÁO CÁO CUỐI CÙNG
-    print("\n" + "="*60)
-    print(f"🎯 ĐỘ CHÍNH XÁC TỔNG (ACCURACY): {(so_cau_dung / tong_so_anh) * 100:.2f}%")
-    print("="*60)
-    for mg, kq in thong_ke.items():
-        if kq['tong'] > 0:
-            acc = (kq['dung'] / kq['tong']) * 100
-            print(f" 💵 {mg:<7}: {acc:5.1f}% ({kq['dung']:02d}/{kq['tong']:02d} ảnh)")
+    # IN BẢNG BÁO CÁO 
+    print("\n" + "="*80)
+    print(f"ĐỘ CHÍNH XÁC TỔNG (OVERALL ACCURACY): {(so_cau_dung / tong_so_anh) * 100:.2f}%")
+    print("="*80)
+    print(f"{'MỆNH GIÁ':<10} | {'ĐÚNG/TỔNG':<10} | {'ACCURACY':<10} | {'PRECISION':<10} | {'RECALL':<10}")
+    print("-" * 80)
 
-# if __name__ == "__main__":
-    # Đã sửa lại đường dẫn thư mục chuẩn (Tùy thuộc vào việc Hà mở Terminal ở thư mục gốc hay src)
+    for mg in cac_menh_gia:
+        tong_anh = thong_ke[mg]['tong']
+        so_lan_dung = thong_ke[mg]['dung']
+        tong_du_doan = so_lan_du_doan_la.get(mg, 0)
+
+        if tong_anh > 0:
+            acc_percent = (so_lan_dung / tong_anh) * 100
+            recall = so_lan_dung / tong_anh
+            precision = so_lan_dung / tong_du_doan if tong_du_doan > 0 else 0.0
+
+            print(f" {mg:<9} | {so_lan_dung:02d}/{tong_anh:02d}      | {acc_percent:6.2f}%   | {precision:8.4f} | {recall:8.4f}")
+    
+    print("="*80)
+
+if __name__ == "__main__":
     thu_muc_du_lieu = 'data/raw' 
     if not os.path.exists(thu_muc_du_lieu):
         thu_muc_du_lieu = '../data/raw'
         
-    # Tự động nạp mẫu từ folder raw
     bo_mau_chuan = nap_mau_tu_dong(thu_muc_du_lieu) 
     
-    # Nếu muốn test riêng 1 mệnh giá, ví dụ '1000', hãy gọi hàm test_anh_menh_gia
     if len(bo_mau_chuan) > 0:
-        test_anh_menh_gia(thu_muc_du_lieu, '1000', bo_mau_chuan)
-        # Nếu muốn test toàn bộ, bỏ comment dòng dưới:
         danh_gia_toan_bo_dataset(thu_muc_du_lieu, bo_mau_chuan)
