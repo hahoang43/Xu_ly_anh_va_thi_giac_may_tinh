@@ -49,16 +49,27 @@ def main() -> None:
         return
 
 # Thay thế đoạn lỗi bằng 2 dòng này:
-    f = st.file_uploader("📸 Chọn ảnh tờ tiền cần nhận diện", type=["jpg", "jpeg", "png"])
+
+    # --- Thêm lựa chọn nguồn ảnh: tải lên hoặc chụp camera ---
+    st.markdown("### Chọn nguồn ảnh")
+    source = st.radio("Chọn cách nhập ảnh", ["Tải ảnh lên", "Chụp từ camera"], horizontal=True)
+    image_bgr = None
     is_already_cropped = False # Mặc định luôn là False để hệ thống tự dò biên
 
-    if f is not None:
-        image_bgr = decode_uploaded_image(f.getvalue())
+    if source == "Tải ảnh lên":
+        f = st.file_uploader("📸 Chọn ảnh tờ tiền cần nhận diện", type=["jpg", "jpeg", "png"])
+        if f is not None:
+            image_bgr = decode_uploaded_image(f.getvalue())
+    else:
+        cam_img = st.camera_input("📷 Chụp ảnh tờ tiền")
+        if cam_img is not None:
+            image_bgr = decode_uploaded_image(cam_img.getvalue())
 
+    if image_bgr is not None:
         col1, col2, col3, col4 = st.columns([1, 1, 1, 1])
 
         with col1:
-            st.markdown("**1. Ảnh gốc tải lên**")
+            st.markdown("**1. Ảnh gốc**")
             st.image(cv2.cvtColor(image_bgr, cv2.COLOR_BGR2RGB), use_container_width=True)
 
         with col2:
@@ -88,32 +99,32 @@ def main() -> None:
         if st.button("Bắt đầu Nhận diện", type="primary", use_container_width=True):
             with st.spinner("Đang chạy thuật toán Pipeline..."):
                 start_time = time.time()
-                
+
                 # 1. Tạo ảnh hiển thị cho Bước 2 và Bước 3 (Vì file main không trả về ảnh)
                 if is_already_cropped:
                     img_cat = cv2.resize(image_bgr, (800, 400))
                 else:
                     img_cat = phan_doan_va_nan_chinh(image_bgr)
                     if img_cat is None: img_cat = cv2.resize(image_bgr, (800, 400))
-                
+
                 img_sach = tien_xu_ly_anh(img_cat)
-                
+
                 # 2. Lưu ảnh tạm để hàm nhan_dien_tien trong main.py đọc được (vì main nhận path)
                 temp_path = "temp_for_main.jpg"
                 cv2.imwrite(temp_path, image_bgr)
-                
+
                 # 3. GỌI ĐÚNG HÀM TỪ MAIN.PY (Thay thế cho predict_image)
                 # Hàm này nhận (path, templates) và trả về (label, info)
                 label, info = nhan_dien_tien(temp_path, templates)
-                
+
                 # 4. Lưu kết quả vào session_state để hiển thị lên giao diện
                 st.session_state["img_cat"] = img_cat
                 st.session_state["img_sach"] = img_sach
-                
+
                 # Vì main không trả về confidence, mình để mặc định hoặc lấy từ info nếu có
                 conf = 0.99 if label != "Không xác định" else 0.0
                 st.session_state["result"] = (label, conf, time.time() - start_time)
-                
+
                 # Dọn dẹp file tạm và cập nhật giao diện
                 if os.path.exists(temp_path): os.remove(temp_path)
                 st.rerun()
